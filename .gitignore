@@ -5,5 +5,5 @@
 venv*/
 
 dist/
-*.egg-info/
+
 build/
