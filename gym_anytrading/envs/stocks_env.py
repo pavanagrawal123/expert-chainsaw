@@ -60,37 +60,29 @@ class StocksEnv(TradingEnv):
             if self._position == Positions.Long:
                 step_reward += price_diff
 
-        return step_reward
+        current_price = self.prices[self._current_tick]
+        if action == Actions.Buy.value or action == Actions.Sell.value:
+            net_new_pos = self.current_positions + action
+            if abs(net_new_pos) < self.max_possible_positions:
+                if self.current_positions > 0 and action == Actions.Sell.value:
+                    cost_basis = self.current_position_cost_bases.pop(0)
+                    self.current_positions -= 1
+                    self._total_profit += current_price - cost_basis
+                if self.current_positions >= 0 and action == Actions.Buy.value:
+                    self.current_position_cost_bases.append(current_price)
+                    self.current_positions += 1
+                if self.current_positions <= 0 and action == Actions.Sell.value:
+                    self.current_position_cost_bases.append(-current_price)
+                    self.current_positions -= 1
+                if self.current_positions < 0 and action == Actions.Buy.value:
+                    cost_basis = self.current_position_cost_bases.pop(0)
+                    self.current_positions += 1
+                    self._total_profit += cost_basis - current_price
+        unrealized_pnl = current_price * self.current_positions - sum(self.current_position_cost_bases)
+        return unrealized_pnl
 
     def _update_profit(self, action):
-        current_price =
-        ___ = current_price * self.current_positions - sum(self.current_position_cost_bases)
-        if (action == Actions.Buy.value or action == Actions.Sell.value):
-            net_new_pos = self.current_positions + action
-            if (abs(net_new_pos) < self.max_possible_positions):
-                if position_long and action == Actions.Sell.value:
-                    self.current_position_cost_bases.pop(0)
-                    self.current_positions -= 1
-                    INCREMENT
-                    RUNNING
-                    PNL
-                if position_long and action == Actions.Sell.value: REPEAT
-                OF
-                PREVIOUS
-                self.current_position_cost_bases.append(current_price)
-                self.current_positions += 1
-            if position_short and action == Actions.Sell.value:
-                self.current_position_cost_bases.append(current_price)
-                INCREMENT
-                POS(NEGATIVELY)
-            if position_short and action == Actions.Buy.value:
-                self.current_position_cost_bases.pop(0)
-            self.current_positions -= 1
-            INCREMENT
-            RUNNING
-            PNL
-
-    return cummulative_pnl and hennesey_pnl
+        return
 
 
         trade = False
@@ -114,7 +106,7 @@ class StocksEnv(TradingEnv):
 
             if self._position == Positions.Long:
                 shares = (self._total_profit * (1 - self.trade_fee_ask_percent)) / last_trade_price
-                self._total_profit = (shares * (1 - self.trade_fee_bid_percent)) * current_price
+
 
 
     def max_possible_profit(self):
