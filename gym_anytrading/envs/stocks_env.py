@@ -1,18 +1,19 @@
 import numpy as np
+from gym import spaces
 
 from .trading_env import TradingEnv, Actions, Positions
 from enum import Enum
 
 class Actions(Enum):
-    Sell = -1
+    Sell = 1
     Flat = 0
-    Buy = 1
+    Buy = 2
 
 
 class Positions(Enum):
-    Short = -1
+    Short = 1
     Flat = 0
-    Long = 1
+    Long = 2
 
 
 
@@ -25,7 +26,7 @@ class StocksEnv(TradingEnv):
 
         self.trade_fee_bid_percent = 0.01  # unit
         self.trade_fee_ask_percent = 0.005  # unit
-
+        self.action_space = spaces.Discrete(len(Actions))
         self.max_possible_positions = 5  # initializing the max # of active positions
         self.current_positions = 0  # track # active positions
         self.current_position_cost_bases = []  # dictionary where keys = numbers corresponding to each position index; values = array of important values (cost bases)
@@ -46,7 +47,7 @@ class StocksEnv(TradingEnv):
 
     def _calculate_reward(self, action):
         step_reward = 0
-
+        #action = action[0]
         trade = False
         if ((action == Actions.Buy.value and self._position == Positions.Short) or
             (action == Actions.Sell.value and self._position == Positions.Long)):
@@ -62,7 +63,8 @@ class StocksEnv(TradingEnv):
 
         current_price = self.prices[self._current_tick]
         if action == Actions.Buy.value or action == Actions.Sell.value:
-            net_new_pos = self.current_positions + action
+            net_change = 1 if action == Actions.Buy.value else -1
+            net_new_pos = self.current_positions + net_change
             if abs(net_new_pos) < self.max_possible_positions:
                 if self.current_positions > 0 and action == Actions.Sell.value:
                     cost_basis = self.current_position_cost_bases.pop(0)
@@ -79,7 +81,7 @@ class StocksEnv(TradingEnv):
                     self.current_positions += 1
                     self._total_profit += cost_basis - current_price
         unrealized_pnl = current_price * self.current_positions - sum(self.current_position_cost_bases)
-        return unrealized_pnl
+        return -(unrealized_pnl*unrealized_pnl) if unrealized_pnl < 0 else unrealized_pnl
 
     def _update_profit(self, action):
         return
