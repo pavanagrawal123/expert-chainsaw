@@ -4,6 +4,7 @@ from gym import spaces
 from .trading_env import TradingEnv, Actions, Positions
 from enum import Enum
 
+
 class Actions(Enum):
     Sell = 1
     Flat = 0
@@ -16,9 +17,12 @@ class Positions(Enum):
     Long = 2
 
 
-
 class StocksEnv(TradingEnv):
     def __init__(self, df, window_size, frame_bound):
+        self.losers = 0
+        self.winners = 0
+        self.buys = 0
+        self.sells = 0
         assert len(frame_bound) == 2
 
         self.frame_bound = frame_bound
@@ -31,26 +35,28 @@ class StocksEnv(TradingEnv):
         self.current_positions = 0  # track # active positions
         self.current_position_cost_bases = []  # dictionary where keys = numbers corresponding to each position index; values = array of important values (cost bases)
 
-        #self.current_position_weights = [] # array of weights for each position in portfolio
+        # self.current_position_weights = [] # array of weights for each position in portfolio
 
     def _process_data(self):
         prices = self.df.loc[:, 'Close'].to_numpy()
-
+        up_ticks = self.df.loc[:, 'upTicks'].to_numpy()
+        down_ticks = self.df.loc[:, 'downTicks'].to_numpy()
+        up_volume = self.df.loc[:, "upVolume"].to_numpy()
+        down_volume = self.df.loc[:, "downVolume"].to_numpy()
         prices[self.frame_bound[0] - self.window_size]  # validate index (TODO: Improve validation)
-        prices = prices[self.frame_bound[0]-self.window_size:self.frame_bound[1]]
+        prices = prices[self.frame_bound[0] - self.window_size:self.frame_bound[1]]
 
         diff = np.insert(np.diff(prices), 0, 0)
-        signal_features = np.column_stack((prices, diff))
+        signal_features = np.column_stack((prices, diff, up_ticks, down_ticks, up_volume, down_volume))
 
         return prices, signal_features
 
-
     def _calculate_reward(self, action):
         step_reward = 0
-        #action = action[0]
+        # action = action[0]
         trade = False
         if ((action == Actions.Buy.value and self._position == Positions.Short) or
-            (action == Actions.Sell.value and self._position == Positions.Long)):
+                (action == Actions.Sell.value and self._position == Positions.Long)):
             trade = True
 
         if trade:
@@ -69,23 +75,35 @@ class StocksEnv(TradingEnv):
                 if self.current_positions > 0 and action == Actions.Sell.value:
                     cost_basis = self.current_position_cost_bases.pop(0)
                     self.current_positions -= 1
-                    self._total_profit += current_price - cost_basis
-                if self.current_positions >= 0 and action == Actions.Buy.value:
+                    incremental = current_price - cost_basis
+                    if (incremental > 0):
+                        self.winners += 1
+                    if (incremental < 0):
+                        self.losers += 1
+                    self._total_profit += incremental
+                elif self.current_positions >= 0 and action == Actions.Buy.value:
                     self.current_position_cost_bases.append(current_price)
+                    self.buys += 1
                     self.current_positions += 1
-                if self.current_positions <= 0 and action == Actions.Sell.value:
-                    self.current_position_cost_bases.append(-current_price)
+                elif self.current_positions <= 0 and action == Actions.Sell.value:
+                    self.current_position_cost_bases.append(current_price)
+                    self.sells -= 1
                     self.current_positions -= 1
-                if self.current_positions < 0 and action == Actions.Buy.value:
+                elif self.current_positions < 0 and action == Actions.Buy.value:
                     cost_basis = self.current_position_cost_bases.pop(0)
                     self.current_positions += 1
-                    self._total_profit += cost_basis - current_price
-        unrealized_pnl = current_price * self.current_positions - sum(self.current_position_cost_bases)
-        return -(unrealized_pnl*unrealized_pnl) if unrealized_pnl < 0 else unrealized_pnl
+                    incremental = -(current_price - cost_basis)
+                    if (incremental > 0):
+                        self.winners+=1
+                    if (incremental < 0):
+                        self.losers+=1
+                    self._total_profit += incremental
+
+        unrealized_pnl = (current_price - sum(self.current_position_cost_bases)) * self.current_positions
+        return (unrealized_pnl * 1.25) if unrealized_pnl < 0 else -3 if unrealized_pnl == 0 else unrealized_pnl
 
     def _update_profit(self, action):
         return
-
 
         trade = False
 
@@ -108,8 +126,6 @@ class StocksEnv(TradingEnv):
 
             if self._position == Positions.Long:
                 shares = (self._total_profit * (1 - self.trade_fee_ask_percent)) / last_trade_price
-
-
 
     def max_possible_profit(self):
         current_tick = self._start_tick
